@@ -68,7 +68,7 @@ int send_binary_data(char* filename, int connfd)
     {
         printf("File opern error");
         return 1;   
-    }   
+    }
 
     /* Read data from file and send it */
     while(1)
@@ -145,13 +145,21 @@ int receive_binary_data(char* filename, int sockfd, int total)
     return 0;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
+
+    int portnum = atoi(argv[3]);
+
+    if (argc < 5) {
+    fprintf(stderr,"usage %s TCP/UDP Client/Server Port Hostname/IP-address\n", argv[0]);
+    exit(0);
+    }
+
+
     int listenfd = 0;
     int connfd = 0;
     struct sockaddr_in serv_addr;
     char sendBuff[1025];
-    int numrv;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -162,7 +170,7 @@ int main(void)
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(50000);
+    serv_addr.sin_port = htons(portnum);
 
     bind(listenfd, (struct sockaddr*)&serv_addr,sizeof(serv_addr));
 

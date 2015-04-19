@@ -149,8 +149,31 @@ int receive_binary_data(char* filename, int sockfd, int total)
     return 0;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
+
+    int portnum = atoi(argv[3]);
+    char *IP_address = argv[4];
+    struct in_addr temp;
+    struct hostent *server;
+    if (strncmp(argv[4],"localhost",strlen("localhost"))==0)
+    {
+        printf("Local ");
+        server = gethostbyname(IP_address);
+        bcopy((char *)server->h_addr, (char *)&temp.s_addr, server->h_length);
+        IP_address = inet_ntoa(temp);
+    } else {
+        printf("Remote ");
+        IP_address = argv[4];
+    }
+
+
+    if (argc < 5) {
+    fprintf(stderr,"usage %s TCP/UDP Client/Server Port Hostname/IP-address\n", argv[0]);
+    exit(0);
+    }
+
+
     int sockfd = 0;
     struct sockaddr_in serv_addr;
 
@@ -163,8 +186,8 @@ int main(void)
 
     /* Initialize sockaddr_in data structure */
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(50000); // port
-    serv_addr.sin_addr.s_addr = inet_addr("115.43.223.12");
+    serv_addr.sin_port = htons(portnum); // port
+    serv_addr.sin_addr.s_addr = inet_addr(IP_address);
 
     /* Attempt a connection */
     if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
