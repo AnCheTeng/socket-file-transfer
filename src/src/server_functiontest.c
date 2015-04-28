@@ -9,7 +9,8 @@
 #include <sys/types.h>
 #include <time.h>
 
-// usage: log(count, sum, total);
+// Print percentage and time for every 5%
+// Usage: log(count, sum, total);
 int log_display(int count, int sum, int total)
 {
     time_t now;
@@ -21,54 +22,72 @@ int log_display(int count, int sum, int total)
         printf("%s", ctime(&now));
         count+=1;
     }
-    
     return count;
 }
 
-
-int system_send_request(int connfd, char *ack)
+// Send request to socket:
+//   when flag=0, send key-in message
+//   when flag=1, send fixed message
+// Usage: send_request(socked_fd, message, flag)
+int send_request(int sockfd, char *msg, int flag)
 {
-    write(connfd, ack, strlen(ack));
+    switch(flag)
+    {
+        case 0:
+        {
+            char buff[256];
+            memset(buff, 0, sizeof(buff));
+            fgets(buff,255,stdin);
+            write(sockfd, buff, strlen(buff));
+            break;          
+        }
+
+        case 1:
+        {
+            write(sockfd, msg, strlen(msg));
+            break;          
+        }
+
+        default:
+        {
+            printf("Something wrong!");
+            break;          
+        }
+    }
     return(0);
 }
 
-
-int send_request(int connfd)
-{
-    char buff[256];
-    memset(buff, 0, sizeof(buff));
-    fgets(buff,255,stdin);
-    write(connfd, buff, strlen(buff));
-    return(0);
-}
-
+// Receive request from socket
+// Usage: receive_request(socked_fd)
 int receive_request(int sockfd)
 {
     char buff[256];
     memset(buff, 0, sizeof(buff));
     read(sockfd,buff,255);
-    //printf("Here is the message: %s",buff);
-    if (strncmp(buff,"SEND",4)==0)
+    //printf("Here is the message: %s\n",buff);
+    if (strncmp(buff,"SEND",strlen("SEND"))==0)
         return 20;
-    else if (strncmp(buff,"REQUEST",7)==0)
+    else if (strncmp(buff,"REQUEST",strlen("REQUEST"))==0)
         return 15;
-    else if (strncmp(buff,"SOK",3)==0)
+    else if (strncmp(buff,"SOK",strlen("SOK"))==0)
         return 10;
-    else if (strncmp(buff,"ROK",3)==0)
+    else if (strncmp(buff,"ROK",strlen("ROK"))==0)
         return 5;
     else
         return 0;
 }
-int send_binary_data(char* filename, int connfd)
-{
 
+// Send binary data to socket
+// Usage: send_binary_data(filename, socket_fd);
+int send_binary_data(char* filename, int sockfd)
+{
     /* Open the file that we wish to transfer */
     FILE *fp = fopen(filename,"rb");
     if(fp==NULL)
     {
         printf("File opern error");
         return 1;   
-    }
+    }   
 
     /* Read data from file and send it */
     while(1)
@@ -77,32 +96,30 @@ int send_binary_data(char* filename, int connfd)
         unsigned char buff[256]={0};
         int nread = fread(buff,1,256,fp);
 
-        //printf("Bytes read %d. ", nread);        
-        
         /* If read was success, send data. */
         if(nread > 0)
         {
             //printf("Sending. \n");
-            write(connfd, buff, nread);
+            write(sockfd, buff, nread);
         }
-        /*
-         * There is something tricky going on with read .. 
-         * Either there was error, or we reached end of file.
-         */
+
+        /* There is something tricky going on with read .. 
+         * Either there was error, or we reached end of file. */
         if (nread < 256)
         {
             if (feof(fp))
-                printf("End of file\n");
+                printf("End of file. Transmission is over.\n");
             if (ferror(fp))
                 printf("Error reading\n");
             break;
         }
     }
-
     return 0;
 }
 
-int receive_binary_data(char* filename, int sockfd, int total)
+// Receive binary data from socket
+// Usage: receive_binary_data(filename, socket_fd, filesize);
+int receive_binary_data(char* filename, int sockfd, int filesize)
 {
     /* Create file where data will be stored */
     FILE *fp;
@@ -113,7 +130,6 @@ int receive_binary_data(char* filename, int sockfd, int total)
     int sum = 0;
     int count = 0;
 
-    //fp = fopen(filename, "ab");
     fp = fopen(filename,"wb");
     if(NULL == fp)
     {
@@ -124,24 +140,19 @@ int receive_binary_data(char* filename, int sockfd, int total)
     /* Receive data in chunks of 256 bytes */
     while((bytesReceived = read(sockfd, recvBuff, 256)) > 0)
     {
-
-        //====================== Log function usage ======================
+        /* Print the log-message */
         sum += bytesReceived;
-        count = log_display(count, sum, total);
-        //printf("Bytes received %d\n",bytesReceived);
-        //====================== Log function usage ======================
-
-        // recvBuff[n] = 0;
+        count = log_display(count, sum, filesize);
         fwrite(recvBuff, 1,bytesReceived,fp);
-        // printf("%s \n", recvBuff);
     }
+
     count+=1;
-    log_display(count, sum, total);
+    log_display(count, sum, filesize);
+
     if(bytesReceived < 0)
     {
         printf("\n Read Error \n");
     }
-
     return 0;
 }
 
@@ -154,7 +165,6 @@ int main(int argc, char *argv[])
     fprintf(stderr,"usage %s TCP/UDP Client/Server Port Hostname/IP-address\n", argv[0]);
     exit(0);
     }
-
 
     int listenfd = 0;
     int connfd = 0;
@@ -187,17 +197,17 @@ int main(int argc, char *argv[])
     flag = receive_request(connfd);
     while (flag!=20 && flag!=15)
     {
-        system_send_request(connfd,"WRONG");
+        send_request(connfd,"WRONG", 1);
         flag = receive_request(connfd);
     }
     //===========================================================
     
     if(flag==20)
     {
-        system_send_request(connfd,"SOK");
+        send_request(connfd,"SOK", 1);
     } else if(flag==15)
     {
-        system_send_request(connfd,"ROK");
+        send_request(connfd,"ROK", 1);
     }
 
     if (flag == 15)
@@ -207,7 +217,7 @@ int main(int argc, char *argv[])
     } else if (flag == 20)
     {
         /* if server want to receive data: */
-        receive_binary_data("sample_file2.txt", connfd, 13999);
+        receive_binary_data("output_data.txt", connfd, 13999);
     }
 
     close(connfd);
