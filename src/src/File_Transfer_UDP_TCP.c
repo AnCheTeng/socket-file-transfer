@@ -335,7 +335,7 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
     }
 
-    printf("\nPacket loss rate: %d\n\n", 100*loss/total_packet_number);
+    printf("\nPacket Loss Rate: %d%\n\n", 100*loss/total_packet_number);
     return 0;
 }
 
