@@ -20,6 +20,15 @@ int zero_one_converter(int number)
     }
 }
 
+int filesize(FILE *fp)
+{
+    int sz;
+    fseek(fp, 0L, SEEK_END);
+    sz = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return sz;
+}
+
 int log_display(int count, int sum, int total)
 {
     time_t now;
@@ -33,6 +42,44 @@ int log_display(int count, int sum, int total)
     }
 
     return count;
+}
+
+int send_file_size(FILE *fp, int sockfd, struct sockaddr_in addr_to)
+{
+    struct timeval tv;
+    fd_set readfds;
+    int addr_len = sizeof(struct sockaddr_in);
+
+    int rcvsize_ok=0;
+
+    /* Send filesize */
+    char filesize_char[100];
+    sprintf(filesize_char, "%d", filesize(fp));
+    
+    while(rcvsize_ok == 0)
+    {
+        sendto(sockfd,filesize_char,strlen(filesize_char),0,(struct sockaddr*)&addr_to,sizeof(addr_to));
+        /* Timer setting */
+        
+        char recvSizeOK[3]= {0};
+
+        FD_ZERO(&readfds);
+        FD_SET(sockfd,&readfds);
+        tv.tv_sec=1;
+        tv.tv_usec=0;
+
+        /*  ========================================Timer========================================  */
+        select(sockfd+1,&readfds,NULL,NULL,&tv);
+        if(FD_ISSET(sockfd,&readfds))
+        {
+            if( recvfrom(sockfd,recvSizeOK,sizeof(recvSizeOK),0, (struct sockaddr *)&addr_to ,&addr_len)>=0 )
+            {
+                rcvsize_ok = atoi(recvSizeOK);
+                printf("Filesize transmit OK!\n");
+                break;
+            }
+        }
+    }    
 }
 
 // Send binary data to socket
@@ -54,10 +101,18 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
     /* Parameter for timer */
     struct timeval tv;
     fd_set readfds;
+    int addr_len = sizeof(struct sockaddr_in);
 
     /* Parameter for loss rate */
     int loss = 0;
     int total_packet_number = 0;
+
+    /* Send filesize */
+    send_file_size(fp, sockfd, addr_to);
+
+    /* Wait for server I/O */
+    usleep(500);
+
 
     /* Read data from file and send it */
     while(1)
@@ -67,7 +122,7 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
         char recvBuff[3]= {0};
         int nread = fread(buff,1,254,fp);
-        int addr_len = sizeof(struct sockaddr_in);
+        
 
         /* flag = 1 when receive correct ack */
         int flag = 0;

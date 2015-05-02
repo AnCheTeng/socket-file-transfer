@@ -35,9 +35,30 @@ int log_display(int count, int sum, int total)
     return count;
 }
 
+int filesize(FILE *fp)
+{
+    int sz;
+    fseek(fp, 0L, SEEK_END);
+    sz = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return sz;
+}
+
+int receive_file_size(int sockfd, struct sockaddr_in addr)
+{
+    char recvBuff[257];
+    memset(recvBuff, 0, sizeof(recvBuff));
+    int addr_len = sizeof(struct sockaddr_in);
+
+    recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr ,&addr_len);
+    int filesize = atoi(recvBuff);
+    sendto(sockfd,"2",1,0,(struct sockaddr*)&addr,sizeof(addr));    
+
+    return filesize;
+}
 // Receive binary data from socket
 // Usage: receive_binary_data(filename, socket_fd, filesize, sockaddr);
-int receive_binary_data(char* filename, int sockfd, int filesize, struct sockaddr_in addr)
+int receive_binary_data(char* filename, int sockfd, struct sockaddr_in addr)
 {
     /* Create file where data will be stored */
     FILE *fp;
@@ -59,6 +80,9 @@ int receive_binary_data(char* filename, int sockfd, int filesize, struct sockadd
     /* Parameter for log_display */
     int sum = 0;
     int count = 0;
+
+    /* Get filesize from sender */
+    int filesize = receive_file_size(sockfd, addr);
 
     /* Receive data in chunks of 256 bytes */
     while( bytesReceived > 255 )
@@ -84,8 +108,10 @@ int receive_binary_data(char* filename, int sockfd, int filesize, struct sockadd
             count = log_display(count, sum, filesize);
             fwrite(msg,1,strlen(msg),fp);
         }
-        else
+        else if (zero_one_converter(ack) == seq_int)
             sendto(sockfd,re_ack,1,0,(struct sockaddr*)&addr,sizeof(addr));
+        else
+            sendto(sockfd,"2",1,0,(struct sockaddr*)&addr,sizeof(addr));
     }
 
     count+=1;
@@ -127,7 +153,7 @@ int main()
 
     struct sockaddr_in from;
 
-    receive_binary_data("output_data.txt", fd, 13999, from);
+    receive_binary_data("output_data.txt", fd, from);
 
     close(fd);
     return 0;
