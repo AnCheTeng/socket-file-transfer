@@ -36,18 +36,8 @@ int log_display(int count, int sum, int total)
 }
 
 
-int string_compare(char* message, char* checkmsg)
-{
-    if (strncmp(message,checkmsg,strlen(checkmsg))==0)
-        return 0;
-    else
-        return 1;
-}
-
-
 // Receive binary data from socket
-// Usage: receive_binary_data(filename, socket_fd, filesize);
-
+// Usage: receive_binary_data(filename, socket_fd);
 int receive_binary_data(char* filename, int sockfd)
 {
     /* Create file where data will be stored */
@@ -96,7 +86,7 @@ int main(int argc, char *argv[])
     int portnum = atoi(argv[3]);
 
     if (argc < 5) {
-        fprintf(stderr,"usage %s TCP/UDP Client/Server Port Hostname/IP-address\n", argv[0]);
+        fprintf(stderr,"usage %s TCP/UDP Client/Server Port Hostname/IP-address \n", argv[0]);
         exit(0);
     }
 

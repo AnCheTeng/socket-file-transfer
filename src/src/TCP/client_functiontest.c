@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <time.h>
-#include <fcntl.h>
 
 int filesize(FILE *fp)
 {
