@@ -57,7 +57,7 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
     /* Parameter for loss rate */
     int loss = 0;
-    int packet_number = 0;
+    int total_packet_number = 0;
 
     /* Read data from file and send it */
     while(1)
@@ -107,13 +107,20 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
                         {
                             check_ack = zero_one_converter(check_ack);
                             flag = 1;
+                            total_packet_number++;
                         }
                     }
                     else
+                    {
+                        total_packet_number++;
                         loss++;
+                    }
                 }
                 else
+                {
+                    total_packet_number++;
                     loss++; /* Time out */
+                }
                 /*  ========================================Timer========================================  */
             }
         }
@@ -131,7 +138,7 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
     }
 
-    printf("Lossed packet: %d\n", loss);
+    printf("Packet loss rate: %d\n", 100*loss/total_packet_number);
     return 0;
 }
 
