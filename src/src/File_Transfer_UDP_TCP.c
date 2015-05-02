@@ -64,7 +64,6 @@ int TCP_send_binary_data(char* filename, int sockfd)
 
     char filesize_char[100];
     sprintf(filesize_char, "%d", filesize(fp));
-    printf("Filesize: %s\n", filesize_char);
     write(sockfd, filesize_char, strlen(filesize_char));
 
     /* Wait for server I/O */
@@ -89,7 +88,7 @@ int TCP_send_binary_data(char* filename, int sockfd)
         if (nread < 256)
         {
             if (feof(fp))
-                printf("End of file. Transmission is over.\n");
+                printf("Transmission is OVER!\n");
             if (ferror(fp))
                 printf("Error reading\n");
             break;
@@ -122,7 +121,6 @@ int TCP_receive_binary_data(char* filename, int sockfd)
 
     read(sockfd, recvBuff, 256);
     int filesize = atoi(recvBuff);
-    printf("Receive filesize: %d\n", filesize);
     memset(recvBuff, 0, sizeof(recvBuff));
 
     /* Receive data in chunks of 256 bytes */
@@ -176,7 +174,6 @@ int UDP_send_file_size(FILE *fp, int sockfd, struct sockaddr_in addr_to)
             if( recvfrom(sockfd,recvSizeOK,sizeof(recvSizeOK),0, (struct sockaddr *)&addr_to ,&addr_len)>=0 )
             {
                 rcvsize_ok = atoi(recvSizeOK);
-                printf("Filesize transmit OK!\n");
                 break;
             }
         }
@@ -407,7 +404,7 @@ int main(int argc, char *argv[])
 
     if (strncmp(argv[1],"TCP",strlen("TCP"))==0)
     {
-    	printf("TCP mode\n");
+    	printf("TCP mode!\n\n");
     	if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
     	{
 		    int sockfd = 0;
@@ -478,6 +475,7 @@ int main(int argc, char *argv[])
     }
     else if (strncmp(argv[1],"UDP",strlen("UDP"))==0)
     {
+    	printf("UDP mode!\n\n");
     	if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
     	{
 		    int fd,r;
