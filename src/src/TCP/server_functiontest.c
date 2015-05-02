@@ -66,11 +66,8 @@ int receive_binary_data(char* filename, int sockfd)
         return 1;
     }
 
-
-
     read(sockfd, recvBuff, 256);
-    // int filesize = atoi(recvBuff);
-    int filesize = 13999;
+    int filesize = atoi(recvBuff);
     printf("Receive filesize: %d\n", filesize);
     memset(recvBuff, 0, sizeof(recvBuff));
 
