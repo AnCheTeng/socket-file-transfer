@@ -8,6 +8,19 @@
 #include <string.h>
 #include <sys/socket.h>
 
+int zero_one_converter(int number)
+{
+    if (number==0)
+        return 1;
+    else if (number==1)
+        return 0;
+    else
+    {
+        printf("Wrong input!\n");
+        return 2;
+    }
+}
+
 int log_display(int count, int sum, int total)
 {
     time_t now;
@@ -22,28 +35,12 @@ int log_display(int count, int sum, int total)
     return count;
 }
 
-int string_compare(char* message, char* checkmsg)
-{
-    if (strncmp(message,checkmsg,strlen(checkmsg))==0)
-        return 0;
-    else
-        return 1;
-}
-
 // Receive binary data from socket
 // Usage: receive_binary_data(filename, socket_fd, filesize, sockaddr);
 int receive_binary_data(char* filename, int sockfd, int filesize, struct sockaddr_in addr)
 {
     /* Create file where data will be stored */
     FILE *fp;
-    int bytesReceived = 256;
-    char recvBuff[257];
-    int addr_len = sizeof(struct sockaddr_in);
-    memset(recvBuff, '0', sizeof(recvBuff));
-    int ack = 0;
-    int sum = 0;
-    int count = 0;
-
     fp = fopen(filename,"wb");
     if(NULL == fp)
     {
@@ -51,45 +48,44 @@ int receive_binary_data(char* filename, int sockfd, int filesize, struct sockadd
         return 1;
     }
 
+    /* Parameter for recvfrom */
+    int bytesReceived = 256;
+    char recvBuff[257];
+    int addr_len = sizeof(struct sockaddr_in);
+
+    /* For acknowledge check */
+    int ack = 0;
+
+    /* Parameter for log_display */
+    int sum = 0;
+    int count = 0;
+
     /* Receive data in chunks of 256 bytes */
     while( bytesReceived > 255 )
     {
         memset(recvBuff, 0, sizeof(recvBuff));
         bytesReceived = recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr ,&addr_len);
-        char *pack = strtok(recvBuff, " ");
+        
+        /* Divide the package */
+        char *seq = strtok(recvBuff, " ");
         char *msg = strtok(NULL, "");
-        // printf("%s\n",msg);
-        int apack = atoi(pack);
-        if (ack == 0)
+        int seq_int = atoi(seq);
+
+        /* Generate re_ack for duplicate packet */
+        char *re_ack = "0";
+        if(ack == 1)
+            re_ack += 1; /* Convert '0' to '1' */
+
+        if (ack == seq_int)
         {
-            if(ack==apack)
-            {
-                sendto(sockfd,"0",1,0,(struct sockaddr*)&addr,sizeof(addr));
-                ack = 1;
-                sum += bytesReceived;
-                count = log_display(count, sum, filesize);
-                fwrite(msg,1,strlen(msg),fp);
-            }
-            else
-                sendto(sockfd,"1",1,0,(struct sockaddr*)&addr,sizeof(addr));
+            sendto(sockfd,seq,1,0,(struct sockaddr*)&addr,sizeof(addr));
+            ack = zero_one_converter(ack);
+            sum += bytesReceived;
+            count = log_display(count, sum, filesize);
+            fwrite(msg,1,strlen(msg),fp);
         }
-        else if (ack==1)
-        {
-            if(ack==apack)
-            {
-                sendto(sockfd,"1",1,0,(struct sockaddr*)&addr,sizeof(addr));
-                ack = 0;
-                sum += bytesReceived;
-                count = log_display(count, sum, filesize);
-                fwrite(msg,1,strlen(msg),fp);
-            }
-            else
-                sendto(sockfd,"0",1,0,(struct sockaddr*)&addr,sizeof(addr));
-        }
-        /* Print the log-message */
-        // sum += bytesReceived;
-        // count = log_display(count, sum, filesize);
-        // fwrite(recvBuff,1,bytesReceived,fp);
+        else
+            sendto(sockfd,re_ack,1,0,(struct sockaddr*)&addr,sizeof(addr));
     }
 
     count+=1;
@@ -100,7 +96,7 @@ int receive_binary_data(char* filename, int sockfd, int filesize, struct sockadd
         printf("\n Read Error \n");
     }
 
-    printf("OVER!\n");
+    printf("Transmission is OVER!\n");
 
     return 0;
 }
@@ -108,7 +104,6 @@ int receive_binary_data(char* filename, int sockfd, int filesize, struct sockadd
 
 int main()
 {
-
     struct sockaddr_in addr;
     int listenfd,fd;
 
@@ -117,9 +112,6 @@ int main()
         perror("socket create error!\n");
         exit(-1);
     }
-
-    printf("socket fd=%d\n",fd);
-
 
     addr.sin_family=AF_INET;
     addr.sin_port=htons(6666);
@@ -131,34 +123,11 @@ int main()
         close(fd);
         exit(-1);
     }
-    printf("Bind successfully.\n");
+    printf("Server bind successfully.\n");
 
     struct sockaddr_in from;
 
     receive_binary_data("output_data.txt", fd, 13999, from);
-
-    // char buf[255];
-
-    // socklen_t len;
-    // len=sizeof(from);
-    // int hi=0;
-    // while(hi==0)
-    // {
-    //     listenfd=recvfrom(fd,buf,sizeof(buf),0,(struct sockaddr*)&from,&len);
-    //     if(listenfd>0)
-    //     {
-    //         buf[listenfd]=0;
-    //         printf("The message received for %s is :%s\n",inet_ntoa(from.sin_addr),buf);
-    //     }
-    //     else
-    //     {
-    //         break;
-    //     }
-    //     if(string_compare(buf,"OVER")==0)
-    //     {
-    //         hi = 1;
-    //     }
-    // }
 
     close(fd);
     return 0;

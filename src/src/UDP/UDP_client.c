@@ -7,6 +7,19 @@
 #include <time.h>
 #include <string.h>
 
+int zero_one_converter(int number)
+{
+    if (number==0)
+        return 1;
+    else if (number==1)
+        return 0;
+    else
+    {
+        printf("Wrong input!\n");
+        return 2;
+    }
+}
+
 int log_display(int count, int sum, int total)
 {
     time_t now;
@@ -18,15 +31,8 @@ int log_display(int count, int sum, int total)
         printf("%s", ctime(&now));
         count+=1;
     }
-    return count;
-}
 
-int string_compare(char* message, char* checkmsg)
-{
-    if (strncmp(message,checkmsg,strlen(checkmsg))==0)
-        return 0;
-    else
-        return 1;
+    return count;
 }
 
 // Send binary data to socket
@@ -41,91 +47,75 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
         return 1;
     }
 
+    /* Parameter for acknowledge check */
     int check_ack = 0;
+    int received_ack;
+
+    /* Parameter for timer */
     struct timeval tv;
     fd_set readfds;
+
+    /* Parameter for loss rate */
     int loss = 0;
+    int packet_number = 0;
+
     /* Read data from file and send it */
     while(1)
     {
         /* First read file in chunks of 256 bytes */
         unsigned char buff[254]= {0};
+
         char recvBuff[3]= {0};
         int nread = fread(buff,1,254,fp);
         int addr_len = sizeof(struct sockaddr_in);
 
-        unsigned int n=0;
+        /* flag = 1 when receive correct ack */
+        int flag = 0;
 
         /* If read was success, send data. */
         if(nread > 0)
         {
-            if(check_ack == 1)
+            while(flag == 0)
             {
-                char packet[256] = "1 ";
-                strcat(packet,buff);
-                while(check_ack==1)
-                {
-                    sendto(sockfd,packet,strlen(packet),0,(struct sockaddr*)&addr_to,sizeof(addr_to));
-                    FD_ZERO(&readfds);
-                    FD_SET(sockfd,&readfds);
-                    tv.tv_sec=2;
-                    tv.tv_usec=0;
-                    select(sockfd+1,&readfds,NULL,NULL,&tv);
-                    if(FD_ISSET(sockfd,&readfds))
-                    {
-                        if((n=recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr_to ,&addr_len))>=0)
-                        {
-                            // printf("in time ,left time %d s ,%d usec\n",tv.tv_sec,tv.tv_usec);
-                            int cack = atoi(recvBuff);
-                            if (cack==check_ack)
-                            {
-                                check_ack = 0;
-                            }
-                        }
-                        else
-                            loss++;
-                    }
-                    else
-                        loss++;//printf("timeout\n");
+                /* Empty packet and set the header */
+                char packet[256] = {0};
+                packet[1] = ' ';
+                packet[0] = '0';
+                if(check_ack == 1)
+                    packet[0] = '1';
 
-                }
-
-            }
-            else if (check_ack == 0)
-            {
-                char packet[256] = "0 ";
+                /* Combine the header and message */
                 strcat(packet,buff);
 
-                while(check_ack==0)
+                /* Send packet into socket */
+                sendto(sockfd,packet,strlen(packet),0,(struct sockaddr*)&addr_to,sizeof(addr_to));
+
+                /* Timer setting */
+                FD_ZERO(&readfds);
+                FD_SET(sockfd,&readfds);
+                tv.tv_sec=1;
+                tv.tv_usec=0;
+
+                /*  ========================================Timer========================================  */
+                select(sockfd+1,&readfds,NULL,NULL,&tv);
+                if(FD_ISSET(sockfd,&readfds))
                 {
-
-                    sendto(sockfd,packet,strlen(packet),0,(struct sockaddr*)&addr_to,sizeof(addr_to));
-
-                    FD_ZERO(&readfds);
-                    FD_SET(sockfd,&readfds);
-                    tv.tv_sec=2;
-                    tv.tv_usec=0;
-                    select(sockfd+1,&readfds,NULL,NULL,&tv);
-                    if(FD_ISSET(sockfd,&readfds))
+                    if( recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr_to ,&addr_len)>=0 )
                     {
-                        if((n=recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr_to ,&addr_len))>=0)
+                        received_ack = atoi(recvBuff);
+                        if (received_ack == check_ack)
                         {
-                            // printf("in time ,left time %d s ,%d usec\n",tv.tv_sec,tv.tv_usec);
-                            int cack = atoi(recvBuff);
-                            if (cack==check_ack)
-                            {
-                                check_ack = 1;
-                            }
+                            check_ack = zero_one_converter(check_ack);
+                            flag = 1;
                         }
-                        else
-                            loss++;
                     }
                     else
-                        loss++;//printf("timeout\n");
+                        loss++;
                 }
+                else
+                    loss++; /* Time out */
+                /*  ========================================Timer========================================  */
             }
-            //printf("Sending. \n");
-            //write(sockfd, buff, nread);
         }
 
         /* There is something tricky going on with read ..
@@ -133,8 +123,7 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
         if (nread < 254)
         {
             if (feof(fp))
-                printf("End of file. Transmission is over.\n");
-            // sendto(sockfd,"2",1,0,(struct sockaddr*)&addr_to,sizeof(addr_to));
+                printf("End of file. \nTransmission is OVER!\n");
             if (ferror(fp))
                 printf("Error reading\n");
             break;
@@ -142,8 +131,7 @@ int send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
     }
 
-    printf("Loss packet: %d\n", loss);
-
+    printf("Lossed packet: %d\n", loss);
     return 0;
 }
 
@@ -159,17 +147,16 @@ int main()
         perror("socket create error!\n");
         exit(-1);
     }
-    printf("socket fd=%d\n",fd);
 
-    //目標服務器地址
+    /* Server IP Address setting*/
     addr_to.sin_family=AF_INET;
     addr_to.sin_port=htons(6666);
     addr_to.sin_addr.s_addr=inet_addr("127.0.0.1");
 
-    //本機地址
+    /* Client IP Address setting*/
     addr_from.sin_family=AF_INET;
-    addr_from.sin_port=htons(0);//獲得任意空閑端口
-    addr_from.sin_addr.s_addr=htons(INADDR_ANY);//獲得本機地址
+    addr_from.sin_port=htons(0); /* Get a free port */
+    addr_from.sin_addr.s_addr=htons(INADDR_ANY); /* Get client-self IP address */
 
     if(bind(fd,(struct sockaddr*)&addr_from,sizeof(addr_from))<0)
     {
@@ -180,31 +167,8 @@ int main()
 
     printf("Client Bind successfully.\n");
 
-    send_binary_data("test_input100mb.txt",fd,addr_to);
-    // char buf[255];
-    // int len;
-    // int hi=0;
-    // while(hi==0)
-    // {
-    //     r=read(0,buf,sizeof(buf));
-    //     if(r<0)
-    //     {
-    //         break;
-    //     }
-    //     len=sendto(fd,buf,r,0,(struct sockaddr*)&addr_to,sizeof(addr_to));
-    //     if(len==-1)
-    //     {
-    //         printf("send falure!\n");
-    //     }
-    //     else
-    //     {
-    //         printf("%d bytes have been sended successfully!\n",len);
-    //     }
-    //     if(string_compare(buf,"OVER")==0)
-    //     {
-    //         hi = 1;
-    //     }
-    // }
+    send_binary_data("sample_file1.txt",fd,addr_to);
+
     close(fd);
     return 0;
 }
