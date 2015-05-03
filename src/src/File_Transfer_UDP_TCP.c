@@ -9,7 +9,26 @@
 #include <string.h>
 #include <time.h>
 
-// Function: Give the filesize of the file which fp point to 
+/* TCP/UDP file transfer
+   2015/05/01
+   Author: An-Che Teng, ES104, NCKU */
+
+/* Function List:
+    ======================= Shared Functions ======================
+    filesize(file_descripter);
+    log(count, sum, total);
+    ======================== TCP Functions ========================
+    TCP_send_binary_data(filename, socket_fd);
+    TCP_receive_binary_data(filename, socket_fd);
+    ======================== UDP Functions ========================
+    zero_one_converter( 0_or_1 );
+    UDP_send_file_size(file_descriptor, socket_fd, sockaddr);
+    UDP_send_binary_data(filename, socket_fd, sockaddr);
+    UDP_receive_file_size(file_descriptor, socket_fd, sockaddr);
+    UDP_receive_binary_data(filename, socket_fd, sockaddr);
+*/
+
+// Function: Give the filesize of the file which fp point to
 // Usage: filesize(file_descripter);
 int filesize(FILE *fp)
 {
@@ -19,7 +38,7 @@ int filesize(FILE *fp)
 
     /* Now fp is at the tail of file, so equal to file size. */
     sz = ftell(fp);
-    
+
     /* Let fp back to file head!! */
     fseek(fp, 0L, SEEK_SET);
 
@@ -31,7 +50,7 @@ int filesize(FILE *fp)
 // Usage: log(count, sum, total);
 int log_display(int count, int sum, int total)
 {
-	/* Present time */
+    /* Present time */
     time_t now;
     time(&now);
 
@@ -47,22 +66,8 @@ int log_display(int count, int sum, int total)
     return count;
 }
 
-// Function: Convert 0/1 (0->1 or 1->0)
-// Usage: zero_one_converter( 0_or_1 )
-int zero_one_converter(int number)
-{
-    if (number==0)
-        return 1;
-    else if (number==1)
-        return 0;
-    else
-    {
-        printf("Wrong input!\n");
-        return 2;
-    }
-}
 
-// Send binary data to socket (TCP)
+// Function: Send binary data to socket (TCP)
 // Usage: TCP_send_binary_data(filename, socket_fd);
 int TCP_send_binary_data(char* filename, int sockfd)
 {
@@ -74,9 +79,15 @@ int TCP_send_binary_data(char* filename, int sockfd)
         return 1;
     }
 
+    /* Parameter for log_display */
+    int sum = 0;
+    int count = 0;
+    int opend_filesize = filesize(fp);
+
     /* Change the filesize(int) which get from filesize() to string(char[]) */
     char filesize_char[100];
-    sprintf(filesize_char, "%d", filesize(fp));
+    sprintf(filesize_char, "%d", opend_filesize);
+
 
     /* Send filesize to socket */
     write(sockfd, filesize_char, strlen(filesize_char));
@@ -94,6 +105,10 @@ int TCP_send_binary_data(char* filename, int sockfd)
         /* If read was success, send data. */
         if(nread > 0)
         {
+            /* Print the log-message and write msg into socket*/
+            sum += nread;
+            count = log_display(count, sum, opend_filesize);
+
             write(sockfd, buff, nread);
         }
 
@@ -102,7 +117,7 @@ int TCP_send_binary_data(char* filename, int sockfd)
         if (nread < 256)
         {
             if (feof(fp))
-                printf("Transmission is OVER!\n");
+                printf("\nTransmission is OVER!\n");
             if (ferror(fp))
                 printf("Error reading\n");
             break;
@@ -112,8 +127,7 @@ int TCP_send_binary_data(char* filename, int sockfd)
 }
 
 
-
-// Receive binary data from socket (TCP)
+// Function: Receive binary data from socket (TCP)
 // Usage: TCP_receive_binary_data(filename, socket_fd);
 int TCP_receive_binary_data(char* filename, int sockfd)
 {
@@ -127,7 +141,7 @@ int TCP_receive_binary_data(char* filename, int sockfd)
     }
 
     /* Parameter for read, and empty the recvBuff */
-    int bytesReceived = 0;    
+    int bytesReceived = 0;
     char recvBuff[256];
     memset(recvBuff, 0, sizeof(recvBuff));
 
@@ -155,9 +169,25 @@ int TCP_receive_binary_data(char* filename, int sockfd)
         printf("\n Read Error \n");
     }
 
-	printf("Transmission is OVER!\n");
+    printf("\nTransmission is OVER!\n");
 
     return 0;
+}
+
+
+// Function: Convert 0/1 (0->1 or 1->0)
+// Usage: zero_one_converter( 0_or_1 );
+int zero_one_converter(int number)
+{
+    if (number==0)
+        return 1;
+    else if (number==1)
+        return 0;
+    else
+    {
+        printf("Wrong input!\n");
+        return 2;
+    }
 }
 
 
@@ -165,7 +195,7 @@ int TCP_receive_binary_data(char* filename, int sockfd)
 // Usage: UDP_send_file_size(file_descriptor, socket_fd, sockaddr);
 int UDP_send_file_size(FILE *fp, int sockfd, struct sockaddr_in addr_to)
 {
-	/* Parameter for timer */
+    /* Parameter for timer */
     struct timeval tv;
     fd_set readfds;
 
@@ -178,13 +208,13 @@ int UDP_send_file_size(FILE *fp, int sockfd, struct sockaddr_in addr_to)
     /* Change filesize to char */
     char filesize_char[100];
     sprintf(filesize_char, "%d", filesize(fp));
-    
+
     /* Continues send filesize until the ack(2) is received */
     while(rcvsize_ok == 0)
     {
-    	/* Send filesize */
+        /* Send filesize */
         sendto(sockfd,filesize_char,strlen(filesize_char),0,(struct sockaddr*)&addr_to,sizeof(addr_to));
-        
+
         /* Buffer for ack_of_filesize */
         char recvSizeOK[3]= {0};
 
@@ -199,24 +229,25 @@ int UDP_send_file_size(FILE *fp, int sockfd, struct sockaddr_in addr_to)
         /* Received in time */
         if(FD_ISSET(sockfd,&readfds))
         {
-        	/* Received correct */
+            /* Received correct */
             if( recvfrom(sockfd,recvSizeOK,sizeof(recvSizeOK),0, (struct sockaddr *)&addr_to ,&addr_len)>=0 )
             {
                 rcvsize_ok = atoi(recvSizeOK);
                 /* Ack correct */
                 if (rcvsize_ok==2)
-	                break;
-	            else /* Ack wrong */
-	            {
-	            	rcvsize_ok=0;
-	            	break;
-	            }
+                    break;
+                else /* Ack wrong */
+                {
+                    rcvsize_ok=0;
+                    break;
+                }
             }
         }
         /* else: Timeout */
         /*  ========================================Timer========================================  */
-    }    
+    }
 }
+
 
 // Function: Send binary data to socket
 // Usage: UDP_send_binary_data(filename, socket_fd, sockaddr);
@@ -246,6 +277,11 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
     /* Send filesize */
     UDP_send_file_size(fp, sockfd, addr_to);
 
+    /* Parameter for log_display */
+    int sum = 0;
+    int count = 0;
+    int opend_filesize = filesize(fp);
+
     /* Wait for server I/O */
     usleep(500);
 
@@ -261,7 +297,7 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
         /* Read from file(fp) and record read bytes number(nread) */
         int nread = fread(buff,1,254,fp);
-        
+
 
         /* flag = 1 when receive correct ack */
         int flag = 0;
@@ -269,6 +305,11 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
         /* If read was success, send data. */
         if(nread > 0)
         {
+
+            /* Print the log-message and write msg into file*/
+            sum += nread;
+            count = log_display(count, sum, opend_filesize);
+
             while(flag == 0)
             {
                 /* Empty packet and set the header */
@@ -308,7 +349,7 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
                     }
                     else
                     {
-                    	/* Receive fail */
+                        /* Receive fail */
                         total_packet_number++;
                         loss++;
                     }
@@ -327,7 +368,7 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
         if (nread < 254)
         {
             if (feof(fp))
-                printf("End of file. \nTransmission is OVER!\n");
+                printf("\nTransmission is OVER!\n");
             if (ferror(fp))
                 printf("Error reading\n");
             break;
@@ -335,15 +376,16 @@ int UDP_send_binary_data(char* filename, int sockfd, struct sockaddr_in addr_to)
 
     }
 
-    printf("\nPacket Loss Rate: %d%\n\n", 100*loss/total_packet_number);
+    printf("\nPacket Loss Rate: %d %%\n\n", 100*loss/total_packet_number);
     return 0;
 }
+
 
 // Function: Receive filesize from socket
 // Usage: UDP_receive_file_size(file_descriptor, socket_fd, sockaddr);
 int UDP_receive_file_size(int sockfd, struct sockaddr_in addr)
 {
-	/* Parameter for filesize_buff, and empty the filesize_buff */
+    /* Parameter for filesize_buff, and empty the filesize_buff */
     char filesize_buff[257];
     memset(filesize_buff, 0, sizeof(filesize_buff));
     int addr_len = sizeof(struct sockaddr_in);
@@ -355,13 +397,13 @@ int UDP_receive_file_size(int sockfd, struct sockaddr_in addr)
     int filesize = atoi(filesize_buff);
 
     /* Send filesize_ack back */
-    sendto(sockfd,"2",1,0,(struct sockaddr*)&addr,sizeof(addr));    
+    sendto(sockfd,"2",1,0,(struct sockaddr*)&addr,sizeof(addr));
 
     return filesize;
 }
 
 
-// Receive binary data from socket
+// Function: Receive binary data from socket
 // Usage: UDP_receive_binary_data(filename, socket_fd, sockaddr);
 int UDP_receive_binary_data(char* filename, int sockfd, struct sockaddr_in addr)
 {
@@ -394,7 +436,7 @@ int UDP_receive_binary_data(char* filename, int sockfd, struct sockaddr_in addr)
     {
         memset(recvBuff, 0, sizeof(recvBuff));
         bytesReceived = recvfrom(sockfd,recvBuff,sizeof(recvBuff),0, (struct sockaddr *)&addr ,&addr_len);
-        
+
         /* Divide the package */
         char *seq = strtok(recvBuff, " ");
         char *msg = strtok(NULL, "");
@@ -408,7 +450,7 @@ int UDP_receive_binary_data(char* filename, int sockfd, struct sockaddr_in addr)
         /* Received expected packet */
         if (ack == seq_int)
         {
-        	/* Send ack back */
+            /* Send ack back */
             sendto(sockfd,seq,1,0,(struct sockaddr*)&addr,sizeof(addr));
 
             /* Convert ack to next expected seq_number */
@@ -430,14 +472,16 @@ int UDP_receive_binary_data(char* filename, int sockfd, struct sockaddr_in addr)
         printf("\n Read Error \n");
     }
 
-    printf("Transmission is OVER!\n");
+    printf("\nTransmission is OVER!\n");
 
     return 0;
 }
 
+
+
 int main(int argc, char *argv[])
 {
-	/* Parameter from cmd input */
+    /* Parameter from cmd input */
     int portnum = atoi(argv[3]);
     char *IP_address = argv[4];
     struct in_addr temp;
@@ -446,12 +490,12 @@ int main(int argc, char *argv[])
     /* Solve the IP-address problem (localhost or direct IP address) */
     if (strncmp(argv[4],"localhost",strlen("localhost"))==0)
     {
-    	/* localhost */
+        /* localhost */
         server = gethostbyname(IP_address);
         bcopy((char *)server->h_addr, (char *)&temp.s_addr, server->h_length);
         IP_address = inet_ntoa(temp);
     } else {
-    	/* Direct IP address */
+        /* Direct IP address */
         IP_address = argv[4];
     }
 
@@ -463,164 +507,164 @@ int main(int argc, char *argv[])
 
     /* Decide which mode is used.
      * Totally there are four mode:
-     * 	  1. TCP and SEND file (client) 
+     * 	  1. TCP and SEND file (client)
      *    2. TCP and RECV file (server)
      *	  3. UDP and SEND file (client)
-     *    4. UDP and RECV file (server) 
+     *    4. UDP and RECV file (server)
      * Here decide the mode according to cmd input. */
 
     if (strncmp(argv[1],"TCP",strlen("TCP"))==0)
     {
-    	printf("TCP mode!\n\n");
-    	if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
-    	{
-		    int sockfd = 0;
-		    struct sockaddr_in serv_addr;
+        printf("\n\nTCP mode!\n\n");
+        if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
+        {
+            int sockfd = 0;
+            struct sockaddr_in serv_addr;
 
-		    /* Create a socket first */
-		    if((sockfd = socket(AF_INET, SOCK_STREAM, 0))< 0)
-		    {
-		        printf("\n Error : Could not create socket \n");
-		        return 1;
-		    }
+            /* Create a socket first */
+            if((sockfd = socket(AF_INET, SOCK_STREAM, 0))< 0)
+            {
+                printf("\n Error : Could not create socket \n");
+                return 1;
+            }
 
-		    /* Initialize sockaddr_in data structure */
-		    serv_addr.sin_family = AF_INET;
-		    serv_addr.sin_port = htons(portnum); // port
-		    serv_addr.sin_addr.s_addr = inet_addr(IP_address);
+            /* Initialize sockaddr_in data structure */
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_port = htons(portnum); // port
+            serv_addr.sin_addr.s_addr = inet_addr(IP_address);
 
-		    /* Attempt a connection */
-		    if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
-		    {
-		        printf("\n Error : Connect Failed \n");
-		        return 1;
-		    }
+            /* Attempt a connection */
+            if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
+            {
+                printf("\n Error : Connect Failed \n");
+                return 1;
+            }
 
-		    printf("Connect success\n");
+            printf("\nConnect success\n\n");
 
-		    /* TCP send */
-		    TCP_send_binary_data(strtok(argv[5], " "),sockfd);
+            /* TCP send */
+            TCP_send_binary_data(strtok(argv[5], " "),sockfd);
 
-		    return 0;
+            return 0;
 
-    	}
-    	else if(strncmp(argv[2],"RECV",strlen("RECV"))==0)
-    	{
-		    int listenfd = 0;
-		    int connfd = 0;
-		    struct sockaddr_in serv_addr;
-		    char sendBuff[1025];
+        }
+        else if(strncmp(argv[2],"RECV",strlen("RECV"))==0)
+        {
+            int listenfd = 0;
+            int connfd = 0;
+            struct sockaddr_in serv_addr;
+            char sendBuff[1025];
 
-		    /* Create a socket first */
-		    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+            /* Create a socket first */
+            listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
-		    printf("Socket retrieve success\n");
+            printf("\nSocket retrieve success\n\n");
 
-		    memset(&serv_addr, '0', sizeof(serv_addr));
-		    memset(sendBuff, '0', sizeof(sendBuff));
+            memset(&serv_addr, '0', sizeof(serv_addr));
+            memset(sendBuff, '0', sizeof(sendBuff));
 
-		    /* Initialize sockaddr_in data structure */
-		    serv_addr.sin_family = AF_INET;
-		    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-		    serv_addr.sin_port = htons(portnum);
+            /* Initialize sockaddr_in data structure */
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+            serv_addr.sin_port = htons(portnum);
 
-		    /* Bind the address to socket */
-		    bind(listenfd, (struct sockaddr*)&serv_addr,sizeof(serv_addr));
+            /* Bind the address to socket */
+            bind(listenfd, (struct sockaddr*)&serv_addr,sizeof(serv_addr));
 
-		    /* Listen to client */
-		    if(listen(listenfd, 10) == -1)
-		    {
-		        printf("Failed to listen\n");
-		        return -1;
-		    }
+            /* Listen to client */
+            if(listen(listenfd, 10) == -1)
+            {
+                printf("Failed to listen\n");
+                return -1;
+            }
 
-		    /* Accept client connect */
-		    connfd = accept(listenfd, (struct sockaddr*)NULL ,NULL);
+            /* Accept client connect */
+            connfd = accept(listenfd, (struct sockaddr*)NULL ,NULL);
 
-		    /* TCP receive */
-		    TCP_receive_binary_data("output_data.txt", connfd);
+            /* TCP receive */
+            TCP_receive_binary_data("output_data.txt", connfd);
 
-		    close(connfd);
-		    return 0;
+            close(connfd);
+            return 0;
 
-    	}
+        }
     }
     else if (strncmp(argv[1],"UDP",strlen("UDP"))==0)
     {
-    	printf("UDP mode!\n\n");
-    	if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
-    	{
-		    int fd,r;
-		    struct sockaddr_in addr_to;
-		    struct sockaddr_in addr_from;
+        printf("\n\nUDP mode!\n\n");
+        if(strncmp(argv[2],"SEND",strlen("SEND"))==0)
+        {
+            int fd,r;
+            struct sockaddr_in addr_to;
+            struct sockaddr_in addr_from;
 
-		    /* Create a socket first */
-		    if((fd=socket(AF_INET,SOCK_DGRAM,0))<0)
-		    {
-		        perror("socket create error!\n");
-		        exit(-1);
-		    }
+            /* Create a socket first */
+            if((fd=socket(AF_INET,SOCK_DGRAM,0))<0)
+            {
+                perror("socket create error!\n");
+                exit(-1);
+            }
 
-		    /* Server IP Address setting*/
-		    addr_to.sin_family=AF_INET;
-		    addr_to.sin_port=htons(portnum);
-		    addr_to.sin_addr.s_addr=inet_addr(IP_address);
+            /* Server IP Address setting*/
+            addr_to.sin_family=AF_INET;
+            addr_to.sin_port=htons(portnum);
+            addr_to.sin_addr.s_addr=inet_addr(IP_address);
 
-		    /* Client IP Address setting*/
-		    addr_from.sin_family=AF_INET;
-		    addr_from.sin_port=htons(0); /* Get a free port */
-		    addr_from.sin_addr.s_addr=htonl(INADDR_ANY); /* Get client-self IP address */
+            /* Client IP Address setting*/
+            addr_from.sin_family=AF_INET;
+            addr_from.sin_port=htons(0); /* Get a free port */
+            addr_from.sin_addr.s_addr=htonl(INADDR_ANY); /* Get client-self IP address */
 
-		    /* Bind the address to socket */
-		    if(bind(fd,(struct sockaddr*)&addr_from,sizeof(addr_from))<0)
-		    {
-		        printf("Bind error!\n");
-		        close(fd);
-		        exit(-1);
-		    }
+            /* Bind the address to socket */
+            if(bind(fd,(struct sockaddr*)&addr_from,sizeof(addr_from))<0)
+            {
+                printf("Bind error!\n");
+                close(fd);
+                exit(-1);
+            }
 
-		    printf("Client Bind successfully.\n");
+            printf("\nClient Bind successfully.\n\n");
 
-		    /* UDP send */
-		    UDP_send_binary_data(strtok(argv[5], " "),fd,addr_to);
+            /* UDP send */
+            UDP_send_binary_data(strtok(argv[5], " "),fd,addr_to);
 
-		    close(fd);
-		    return 0;
-    	}
-    	else if(strncmp(argv[2],"RECV",strlen("RECV"))==0)
-    	{
-    		int listenfd,fd;
-		    struct sockaddr_in addr;
-		    struct sockaddr_in from;
+            close(fd);
+            return 0;
+        }
+        else if(strncmp(argv[2],"RECV",strlen("RECV"))==0)
+        {
+            int listenfd,fd;
+            struct sockaddr_in addr;
+            struct sockaddr_in from;
 
-		    /* Create a socket first */
-		    if((fd = socket(AF_INET,SOCK_DGRAM,0)) < 0)
-		    {
-		        perror("socket create error!\n");
-		        exit(-1);
-		    }
+            /* Create a socket first */
+            if((fd = socket(AF_INET,SOCK_DGRAM,0)) < 0)
+            {
+                perror("socket create error!\n");
+                exit(-1);
+            }
 
-		    /* Server IP Address setting*/
-		    addr.sin_family=AF_INET;
-		    addr.sin_port=htons(portnum);
-		    addr.sin_addr.s_addr=htonl(INADDR_ANY);
+            /* Server IP Address setting*/
+            addr.sin_family=AF_INET;
+            addr.sin_port=htons(portnum);
+            addr.sin_addr.s_addr=htonl(INADDR_ANY);
 
-		    /* Bind the address to socket */
-		    if(bind(fd,(struct sockaddr*)&addr,sizeof(addr))<0)
-		    {
-		        printf("Bind error!\n");
-		        close(fd);
-		        exit(-1);
-		    }
+            /* Bind the address to socket */
+            if(bind(fd,(struct sockaddr*)&addr,sizeof(addr))<0)
+            {
+                printf("Bind error!\n");
+                close(fd);
+                exit(-1);
+            }
 
-		    printf("Server bind successfully.\n");
+            printf("\nServer bind successfully.\n\n");
 
-		    /* UDP receive */
-		    UDP_receive_binary_data("output_data.txt", fd, from);
+            /* UDP receive */
+            UDP_receive_binary_data("output_data.txt", fd, from);
 
-		    close(fd);
-		    return 0;
+            close(fd);
+            return 0;
 
-    	}    	
+        }
     }
 }
